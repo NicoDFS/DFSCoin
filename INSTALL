@@ -1,0 +1,9 @@
+Building DFSCoin
+
+See doc/readme-qt.rst for instructions on building DFSCoin QT,
+the intended-for-end-users, nice-graphical-interface, reference
+implementation of DFSCoin.
+
+See doc/build-*.txt for instructions on building dfscoind,
+the intended-for-services, no-graphical-interface, reference
+implementation of DFSCoin.
