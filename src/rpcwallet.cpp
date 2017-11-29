@@ -764,6 +764,126 @@ Value sendmany(const Array& params, bool fHelp)
     return wtx.GetHash().GetHex();
 }
 
+
+Value sendfromcoin(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 3 || params.size() > 6)
+        throw runtime_error(
+            "sendfromcoin <fromdfscoinaddress> <todfscoinaddress> <amount> [minconf=1] [comment] [comment-to]\n"
+            "<amount> is a real and is rounded to the nearest 0.000001"
+            + HelpRequiringPassphrase());
+
+    CBitcoinAddress fromAddress(params[0].get_str());
+    CBitcoinAddress address(params[1].get_str());
+    if (!fromAddress.IsValid() || !address.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DFSCoin address");
+    int64_t nAmount = AmountFromValue(params[2]);
+
+    int nMinDepth = 1;
+    if (params.size() > 3)
+        nMinDepth = params[3].get_int();
+
+    string strAccount;
+    map<CTxDestination, string>::iterator mi = pwalletMain->mapAddressBook.find(fromAddress.Get());
+    if (mi != pwalletMain->mapAddressBook.end() && !(*mi).second.empty())
+        strAccount = (*mi).second;
+
+    CWalletTx wtx;
+    wtx.strFromAccount = strAccount;
+    if (params.size() > 4 && params[4].type() != null_type && !params[4].get_str().empty())
+        wtx.mapValue["comment"] = params[4].get_str();
+    if (params.size() > 5 && params[5].type() != null_type && !params[5].get_str().empty())
+        wtx.mapValue["to"]      = params[5].get_str();
+
+    EnsureWalletIsUnlocked();
+
+    // Check funds
+    int64_t nBalance = GetAccountBalance(strAccount, nMinDepth);
+    if (nAmount > nBalance)
+        throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
+
+    // Send
+    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
+    if (strError != "")
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+
+    return wtx.GetHash().GetHex();
+}
+
+
+Value sendmanycoin(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 4)
+        throw runtime_error(
+            "sendmanycoin <fromdfscoinaddress> {address:amount,...} [minconf=1] [comment]\n"
+            "amounts are double-precision floating point numbers"
+            + HelpRequiringPassphrase());
+
+    CBitcoinAddress address(params[0].get_str());
+    if (!address.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DFSCoin address");
+
+    string strAccount;
+    map<CTxDestination, string>::iterator mi = pwalletMain->mapAddressBook.find(address.Get());
+    if (mi != pwalletMain->mapAddressBook.end() && !(*mi).second.empty())
+        strAccount = (*mi).second;
+
+    Object sendTo = params[1].get_obj();
+    int nMinDepth = 1;
+    if (params.size() > 2)
+        nMinDepth = params[2].get_int();
+
+    CWalletTx wtx;
+    wtx.strFromAccount = strAccount;
+    if (params.size() > 3 && params[3].type() != null_type && !params[3].get_str().empty())
+        wtx.mapValue["comment"] = params[3].get_str();
+
+    set<CBitcoinAddress> setAddress;
+    vector<pair<CScript, int64_t> > vecSend;
+
+    int64_t totalAmount = 0;
+    BOOST_FOREACH(const Pair& s, sendTo)
+    {
+        CBitcoinAddress address(s.name_);
+        if (!address.IsValid())
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, string("Invalid DFSCoin address: ")+s.name_);
+
+        if (setAddress.count(address))
+            throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, duplicated address: ")+s.name_);
+        setAddress.insert(address);
+
+        CScript scriptPubKey;
+        scriptPubKey.SetDestination(address.Get());
+        int64_t nAmount = AmountFromValue(s.value_);
+
+        totalAmount += nAmount;
+
+        vecSend.push_back(make_pair(scriptPubKey, nAmount));
+    }
+
+    EnsureWalletIsUnlocked();
+
+    // Check funds
+    int64_t nBalance = GetAccountBalance(strAccount, nMinDepth);
+    if (totalAmount > nBalance)
+        throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
+
+    // Send
+    CReserveKey keyChange(pwalletMain);
+    int64_t nFeeRequired = 0;
+    bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, keyChange, nFeeRequired);
+    if (!fCreated)
+    {
+        if (totalAmount + nFeeRequired > pwalletMain->GetBalance())
+            throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
+        throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
+    }
+    if (!pwalletMain->CommitTransaction(wtx, keyChange))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+
+    return wtx.GetHash().GetHex();
+}
+
 Value addmultisigaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 3)
