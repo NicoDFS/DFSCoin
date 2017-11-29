@@ -258,6 +258,8 @@ static const CRPCCommand vRPCCommands[] =
     { "move",                   &movecmd,                false,  false },
     { "sendfrom",               &sendfrom,               false,  false },
     { "sendmany",               &sendmany,               false,  false },
+    { "sendfromcoin",           &sendfromcoin,           false,  false },
+    { "sendmanycoin",           &sendmanycoin,           false,  false },
     { "addmultisigaddress",     &addmultisigaddress,     false,  false },
     { "addredeemscript",        &addredeemscript,        false,  false },
     { "getrawmempool",          &getrawmempool,          true,   false },
